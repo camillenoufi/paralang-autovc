@@ -45,7 +45,7 @@ class Encoder(nn.Module):
     def __init__(self, dim_neck, dim_emb, freq):
         super(Encoder, self).__init__()
         self.dim_neck = dim_neck
-        self.freq = freq
+        self.freq = freq #what is this variable for?
 
         convolutions = []
         for i in range(3):
@@ -62,19 +62,22 @@ class Encoder(nn.Module):
         self.lstm = nn.LSTM(512, dim_neck, 2, batch_first=True, bidirectional=True)
 
     def forward(self, x, c_org):
-        x = x.squeeze(1).transpose(2, 1)
-        c_org = c_org.unsqueeze(-1).expand(-1, -1, x.size(-1))
+        x = x.squeeze(1).transpose(2, 1) #this is where the frame variability is dealt with
+        c_org = c_org.unsqueeze(-1).expand(-1, -1, x.size(-1)) #expanded along time/frame dimension
         x = torch.cat((x, c_org), dim=1)
 
         for conv in self.convolutions:
             x = F.relu(conv(x))
         x = x.transpose(1, 2)
 
-        self.lstm.flatten_parameters()
+        self.lstm.flatten_parameters() #aggregate all the weight tensors into continuous space of GPU memory
         outputs, _ = self.lstm(x)
-        out_forward = outputs[:, :, :self.dim_neck]
+        out_forward = outputs[:, :, :self.dim_neck] #truncate last dimension to bottleneck size
         out_backward = outputs[:, :, self.dim_neck:]
 
+        #figure out what is going on in the code construction loop.
+        # out_backwards is for what? vs. out_forward
+        # what is self.freq and why do we use it?
         codes = []
         for i in range(0, outputs.size(1), self.freq):
             codes.append(torch.cat((out_forward[:, i + self.freq - 1, :], out_backward[:, i, :]), dim=-1))
@@ -86,10 +89,11 @@ class Decoder(nn.Module):
     """Decoder module:
     """
 
-    def __init__(self, dim_neck, dim_emb, dim_pitch, dim_pre):
+    def __init__(self, dim_neck, dim_emb, dim_pitch, dim_amp, dim_pre):
         super(Decoder, self).__init__()
 
-        self.lstm1 = nn.LSTM(dim_neck * 2 + dim_emb + (dim_pitch+1), dim_pre, 1, batch_first=True)
+        # added +1 to dim_amp to reflect places of no energy
+        self.lstm1 = nn.LSTM(dim_neck * 2 + dim_emb + (dim_pitch+1) + (dim_amp+1), dim_pre, 1, batch_first=True)
 
         convolutions = []
         for i in range(3):
@@ -180,13 +184,14 @@ class Generator(nn.Module):
         self.dim_emb = hparams.dim_emb
         self.dim_pre = hparams.dim_pre
         self.pitch_bin = hparams.pitch_bin
+        self.dim_amp = hparams.dim_amp
         self.freq = hparams.freq
 
         self.encoder = Encoder(self.dim_neck, self.dim_emb, self.freq)
-        self.decoder = Decoder(self.dim_neck, self.dim_emb, self.pitch_bin, self.dim_pre)
+        self.decoder = Decoder(self.dim_neck, self.dim_emb, self.pitch_bin, self.dim_amp, self.dim_pre)
         self.postnet = Postnet()
 
-    def forward(self, x, f0_src, c_org, c_trg):
+    def forward(self, x, f0_src, amp_src, c_org, c_trg):
         codes = self.encoder(x, c_org)
         if c_trg is None:
             return torch.cat(codes, dim=-1)
@@ -196,7 +201,7 @@ class Generator(nn.Module):
             tmp.append(code.unsqueeze(1).expand(-1, int(x.size(1) / len(codes)), -1))
         code_exp = torch.cat(tmp, dim=1)
 
-        encoder_outputs = torch.cat((code_exp, c_trg.unsqueeze(1).expand(-1, x.size(1), -1), f0_src), dim=-1)
+        encoder_outputs = torch.cat((code_exp, c_trg.unsqueeze(1).expand(-1, x.size(1), -1), f0_src, amp_src), dim=-1)
 
         mel_outputs = self.decoder(encoder_outputs)
 

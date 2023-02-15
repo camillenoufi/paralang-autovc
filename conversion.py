@@ -18,6 +18,7 @@ def conversion(args, net, device='cuda'):
     all_test_samples = [glob.glob(os.path.join(p, 'test', '*.npz'))[0] for p in all_spk_path]
     os.makedirs(args.out_dir, exist_ok=True)
 
+    # create pairs of all sample combinations.. we want to change this by zipping our src and trg pairs
     all_pair = itertools.product(all_test_samples, all_test_samples)
     for src, trg in tqdm(all_pair, desc="converting voices"):
         src_name = src.split('/')[-3]
@@ -38,7 +39,7 @@ def conversion(args, net, device='cuda'):
         x_src = torch.from_numpy(x_padded).unsqueeze(0).to(device)
         p_src = torch.from_numpy(quantized_p).unsqueeze(0).to(device)
         emb_src = torch.from_numpy(emb_src_np).unsqueeze(0).to(device)
-        emb_trg = torch.from_numpy(emb_trg_np).unsqueeze(0).to(device)
+        emb_trg =  emb_src #torch.from_numpy(emb_trg_np).unsqueeze(0).to(device)
 
         if args.model == 'autovc':
             out, out_psnt, _ = net(x_src, emb_src, emb_trg)

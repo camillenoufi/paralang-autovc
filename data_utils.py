@@ -24,7 +24,7 @@ class VCDataset(torch.utils.data.Dataset):
         self.npz_path, self.metadata = self.get_npz_path(self.spk_path)
         self.n_speakers = hparams.n_speakers
 
-        assert len(self.npz_path) > 0, "npz 파일 탐색 실패"
+        assert len(self.npz_path) > 0
         random.seed(1234)
         random.shuffle(self.npz_path)
 

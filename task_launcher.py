@@ -29,10 +29,12 @@ train_loader, val_loader, testset = prepare_dataloaders(args.data_dir, hparams)
 arch = os.path.splitext(args.architecture)[0].replace("/", ".")
 print(" [*] Load architecture : {}".format(arch))
 
+#training loop
 solver_mod = importlib.import_module(os.path.splitext(args.solver)[0].replace("/", "."))
 print(" [*] Load solver : {}".format(solver_mod))
 
 # solver
+# initializes model architecture, sets up training params and pathfiles
 solver = solver_mod.AutoVC(arch,
                 model_dir,
                 log_dir,
@@ -41,6 +43,7 @@ solver = solver_mod.AutoVC(arch,
 if args.checkpoint:
     solver.load(args.checkpoint)
 
+# uses base class main training loop (in base.py) and trains each batch using AutoVC class methods
 solver.train(
     train_loader,
     val_loader,

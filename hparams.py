@@ -54,8 +54,9 @@ hparams = tf.contrib.training.HParams(
     dim_neck = 32,
     dim_emb = 12,
     dim_pre = 512,
-    freq = 16,
+    freq = 16,  #2.3 in paper: "the bottleneck is reduced to 16 in frequency... 16Hz?"
     pitch_bin = 256,
+    dim_amp = 256,
 
     ################################################################################
     # Training:

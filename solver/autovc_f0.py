@@ -4,7 +4,7 @@ import numpy as np
 from collections import OrderedDict
 from torch import optim
 from itertools import chain
-from solver.base import Base
+from solver.base import Base #custom base class that AutoVC class inherits from
 import argparse
 from hparams import hparams
 from utils import prepare_dirs
@@ -24,11 +24,11 @@ class AutoVC(Base):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         #self.device = 'cpu'
 
-        # load architecture
+        # load architecture (i.e. )
         arch = importlib.import_module(architecture)
 
-        nets = arch.get_network(hparams)
-        self.net = nets['net'].to(self.device)
+        nets = arch.get_network(hparams) #this is where Generator class is initialized
+        self.net = nets['net'].to(self.device) #generator net is put on device
 
         opt_args = {'lr': hparams.initial_learning_rate, 'betas': (hparams.adam_beta1, hparams.adam_beta2)}
         g_params = self.net.parameters()
@@ -57,6 +57,7 @@ class AutoVC(Base):
     def _eval(self):
         self.net.eval()
 
+    # trains on batch
     def train_on_instance(self,
                           x_real,
                           p_real,

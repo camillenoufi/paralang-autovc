@@ -15,6 +15,7 @@ from scipy import signal
 from librosa.filters import mel
 from numpy.random import RandomState
 from pysptk import sptk
+import crepe
 import librosa
 from utils import butter_highpass
 from utils import speaker_normalization
@@ -37,6 +38,7 @@ def build_from_path(hparams, in_dir, out_dir, spk_emb_path, spk2gen_path, num_wo
 
     # load speaker embedding
     if spk_emb_path:
+        # pre-compute these with SSE model
         spk_embs = pickle.load(open(spk_emb_path, 'rb'))
 
     # load speaker to gender
@@ -98,12 +100,13 @@ def build_from_path(hparams, in_dir, out_dir, spk_emb_path, spk2gen_path, num_wo
 
 
 def _processing_data(hparams, full_path, spk_label, spk_emb, gender, npz_name, pbar, i):
-    if gender == 'M':
-        lo, hi = 50, 250
-    elif gender == 'F':
-        lo, hi = 100, 600
-    else:
-        raise ValueError
+    # we are not using gender data
+    # if gender == 'M':
+    #     lo, hi = 50, 250
+    # elif gender == 'F':
+    #     lo, hi = 100, 600
+    # else:
+    #     raise ValueError
 
     prng = RandomState(int(random.random()))
     x, fs = librosa.load(full_path, sr=hparams.sample_rate)
@@ -114,22 +117,33 @@ def _processing_data(hparams, full_path, spk_label, spk_emb, gender, npz_name, p
     wav = y * 0.96 + (prng.rand(y.shape[0]) - 0.5) * 1e-06
 
     # compute spectrogram
+    # potentially use the hifigan implementation later (like RF5's repo)
     D = pySTFT(wav).T
     D_mel = np.dot(D, mel_basis)
     D_db = 20 * np.log10(np.maximum(min_level, D_mel)) - hparams.ref_level_db
     S = (D_db + 100) / 100
 
     # extract f0
-    f0_rapt = sptk.rapt(wav.astype(np.float32) * 32768, fs, hparams.hop_size, min=lo, max=hi, otype=2)
-    index_nonzero = (f0_rapt != -1e10)
-    mean_f0, std_f0 = np.mean(f0_rapt[index_nonzero]), np.std(f0_rapt[index_nonzero])
-    f0_norm = speaker_normalization(f0_rapt, index_nonzero, mean_f0, std_f0)
+    #f0_rapt = sptk.rapt(wav.astype(np.float32) * 32768, fs, hparams.hop_size, min=lo, max=hi, otype=2)
+    time, f0_crepe, confidence, activation = crepe.predict(wav, fs, viterbi=True)
+        #need to add hop size / timestep parameter
+    f0 = f0_crepe
+    index_nonzero = (f0 > -1e10) #potentially use activations here instead
+    mean_f0, std_f0 = np.mean(f0[index_nonzero]), np.std(f0[index_nonzero])
+    f0_norm = speaker_normalization(f0, index_nonzero, mean_f0, std_f0)
 
-    assert len(S) == len(f0_rapt)
+    #extract RMSE
+    rmse = librosa.feature.rmse(x, frame_length=2*hparams.hop_size, hop_length=hparams.hop_size, center=True)
+        #confirm hopsize to agree with S
+
+
+    assert len(S) == len(f0_norm)
+    assert len(S) == len(rmse)
 
     data = {
         'mel': S.astype(np.float32),
         'f0': f0_norm.astype(np.float32),
+        'rmse': rmse.astype(np.float32),
         'spk_label': spk_label
     }
     if spk_emb is not None:
